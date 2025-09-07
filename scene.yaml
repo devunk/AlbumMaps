@@ -1,18 +1,36 @@
-# Deutschland-Relief im Stil der Schweiz-Karte (weiß/hellgrau Relief + blaues Wasser)
+# Physische Karte Deutschland (oder valabel weltweit)
+# - Farbige Höhenklassen (mit Überhöhungs-Regler)
+# - Wälder dunkelgrün, Siedlungsflächen dunkelgrau
+# - Wasserflächen/-linien blau
+# - keine Labels/Grenzen
 global:
-  bg: [1.0, 1.0, 1.0, 1.0]              # Weißer Hintergrund
-  water_fill: [0.38, 0.69, 1.0, 1.0]    # #61B0FF
-  water_line: [0.41, 0.71, 1.0, 1.0]    # #69B6FF
+  bg: [1.0, 1.0, 1.0, 1.0]              # Hintergrund (weiß)
+  water_fill: [0.38, 0.69, 1.0, 1.0]    # Seen/Meer (#61B0FF)
+  water_line: [0.41, 0.71, 1.0, 1.0]    # Flüsse/Küsten (#69B6FF)
+
+  forest_fill: [0.06, 0.25, 0.12, 1.0]  # sehr dunkles Grün (Wald)
+  urban_fill:  [0.25, 0.27, 0.30, 0.9]  # dunkles Grau (Siedlung)
+
+  # >>> Überhöhungs-Regler für die Höhenklassen (1.0 = natürlich, >1 = stärker)
+  exaggeration: 1.8
+
+  # Farbstufen für die Höhenklassen (RGBA, anpassbar)
+  elev_0:   [0.85, 0.92, 0.83, 1.0]   # < 200 m  : hellgrün
+  elev_200: [0.80, 0.87, 0.78, 1.0]   # 200–600  : leicht grün/beige
+  elev_600: [0.76, 0.74, 0.66, 1.0]   # 600–1000 : beige-grau
+  elev_1000:[0.68, 0.63, 0.55, 1.0]   # 1000–1500: braun-grau
+  elev_1500:[0.78, 0.78, 0.78, 1.0]   # 1500–2500: hellgrau
+  elev_2500:[0.95, 0.95, 0.95, 1.0]   # > 2500   : fast weiß
 
 sources:
-  # Besser sichtbar: fertiges Hillshade von MapTiler (statt terrain-rgb selbst zu schattieren)
-  hillshade:
+  # MapTiler Terrain-RGB (Höhenwerte)
+  terrain-rgb:
     type: Raster
-    url: https://api.maptiler.com/tiles/hillshade/{z}/{x}/{y}.png?key=582YgxGFbrCVlE8xVsbq
+    url: https://api.maptiler.com/tiles/terrain-rgb/{z}/{x}/{y}.png?key=582YgxGFbrCVlE8xVsbq
     tile_size: 512
-    max_zoom: 15
+    max_zoom: 14
 
-  # OpenMapTiles v3 – enthält Layer 'water' (Flächen) & 'waterway' (Linien)
+  # OpenMapTiles v3 – enthält water, waterway, landcover, landuse
   vect:
     type: MVT
     url: https://api.maptiler.com/tiles/v3/{z}/{x}/{y}.mvt?key=582YgxGFbrCVlE8xVsbq
@@ -20,37 +38,115 @@ sources:
     max_zoom: 14
 
 styles:
-  # Dezentes, aber kontrastreicheres Hillshade (anpassbar)
-  hillshade_style:
+  # Raster-Style: färbt die Höhenklassen (Terrain-RGB wird dekodiert)
+  terrain_colors:
     base: raster
     shaders:
+      uniforms:
+        ex: global.exaggeration   # Überhöhung aus global
       blocks:
         color: |
-          // Original ist graustufig; wir heben Kontrast leicht an und halten es hell
-          float g = color.r;
-          // g≈0 = dunkel (Schatten), g≈1 = hell (Licht). Wir klemmen in einen hellen Bereich:
-          g = mix(0.92, 0.62, g);   // 0.92 = fast weiß, 0.62 = hellgrau → mehr Relief sichtbar
-          color = vec4(vec3(g), 1.0);
+          // --- Terrain-RGB zu Höhe in Metern ---
+          float r = color.r * 255.0;
+          float g = color.g * 255.0;
+          float b = color.b * 255.0;
+          float height = -10000.0 + ((r * 256.0 * 256.0 + g * 256.0 + b) * 0.1);
+
+          // künstliche Überhöhung (nur für Farbschwellen, kein echtes Hillshade)
+          height = height * ex;
+
+          // --- Höhenklassen einfärben ---
+          // Schwellen (Meter) – gern anpassen
+          vec4 c;
+          if (height < 200.0) {
+            c = vec4(0.85, 0.92, 0.83, 1.0);  // global.elev_0 (Literal, damit es in Shader konstant ist)
+          } else if (height < 600.0) {
+            c = vec4(0.80, 0.87, 0.78, 1.0);  // global.elev_200
+          } else if (height < 1000.0) {
+            c = vec4(0.76, 0.74, 0.66, 1.0);  // global.elev_600
+          } else if (height < 1500.0) {
+            c = vec4(0.68, 0.63, 0.55, 1.0);  // global.elev_1000
+          } else if (height < 2500.0) {
+            c = vec4(0.78, 0.78, 0.78, 1.0);  // global.elev_1500
+          } else {
+            c = vec4(0.95, 0.95, 0.95, 1.0);  // global.elev_2500
+          }
+          color = c;
 
   water-poly:
     base: polygons
   water-line:
     base: lines
 
+  forest-poly:
+    base: polygons
+  urban-poly:
+    base: polygons
+
 scene:
   background:
     color: global.bg
 
 layers:
-  # 1) Relief
+  # --- 1) Farbiges Relief aus Terrain-RGB ---
   relief:
-    data: { source: hillshade }
+    data: { source: terrain-rgb }
     draw:
-      hillshade_style:
+      terrain_colors:
         order: 0
         raster: true
 
-  # 2) Wasserflächen (Seen/Meere)
+  # --- 2) Wälder (dunkelgrün) ---
+  # OpenMapTiles: landcover.class = 'wood' (manchmal 'forest'), zusätzlich natural=wood
+  forests:
+    data: { source: vect, layer: landcover }
+    filter:
+      all:
+        - $zoom: { min: 5 }
+        - { class: [wood, forest] }
+    draw:
+      forest-poly:
+        order: 7
+        color: global.forest_fill
+
+  # fallback: Einige Tiles führen Waldflächen auch in 'natural' mit class=wood
+  forests_natural:
+    data: { source: vect, layer: natural }
+    filter:
+      all:
+        - $zoom: { min: 6 }
+        - { class: [wood, forest] }
+    draw:
+      forest-poly:
+        order: 7
+        color: global.forest_fill
+
+  # --- 3) Siedlungs-/Stadtflächen (dunkelgrau) ---
+  # OpenMapTiles: landuse.class = residential|commercial|industrial,
+  #               landcover.class = urban (je nach Region)
+  urban_landuse:
+    data: { source: vect, layer: landuse }
+    filter:
+      all:
+        - $zoom: { min: 6 }
+        - { class: [residential, commercial, industrial] }
+    draw:
+      urban-poly:
+        order: 8
+        color: global.urban_fill
+
+  urban_landcover:
+    data: { source: vect, layer: landcover }
+    filter:
+      all:
+        - $zoom: { min: 6 }
+        - { class: [urban] }
+    draw:
+      urban-poly:
+        order: 8
+        color: global.urban_fill
+
+  # --- 4) Wasserflächen & -linien (über Relief und Landflächen) ---
   water_areas:
     data: { source: vect, layer: water }
     draw:
@@ -58,7 +154,6 @@ layers:
         order: 10
         color: global.water_fill
 
-  # 3) Flüsse/Kanäle (waterway)
   waterways:
     data: { source: vect, layer: waterway }
     filter: { $zoom: { min: 5 } }
