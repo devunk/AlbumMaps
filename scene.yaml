@@ -1,0 +1,78 @@
+# Deutschland-Relief im Stil der Schweiz-Karte (weiß/hellgrau Relief + blaues Wasser)
+global:
+  bg: [1.0, 1.0, 1.0, 1.0]              # weißer Hintergrund
+  water_fill: [0.38, 0.69, 1.0, 1.0]    # Seen/Meere (#61B0FF)
+  water_line: [0.41, 0.71, 1.0, 1.0]    # Linien (#69B6FF)
+
+sources:
+  # MapTiler Terrain-RGB → Höheninformationen als Raster
+  terrain-rgb:
+    type: Raster
+    url: https://api.maptiler.com/tiles/terrain-rgb/{z}/{x}/{y}.png?key=582YgxGFbrCVlE8xVsbq
+    tile_size: 512
+    max_zoom: 14
+
+  # MapTiler Vektor-Tiles (für Wasser)
+  vect:
+    type: MVT
+    url: https://api.maptiler.com/maps/streets/256/{z}/{x}/{y}.mvt?key=582YgxGFbrCVlE8xVsbq
+    tile_size: 256
+    max_zoom: 16
+
+styles:
+  hillshade:
+    base: raster
+    shaders:
+      blocks:
+        color: |
+          // Höhen aus MapTiler terrain-rgb dekodieren
+          float r = color.r * 255.0;
+          float g = color.g * 255.0;
+          float b = color.b * 255.0;
+          float height = -10000.0 + ((r * 256.0 * 256.0 + g * 256.0 + b) * 0.1);
+
+          // Normale „faken“: Licht von Nordwest
+          vec3 lightDir = normalize(vec3(0.6, 0.5, 0.6));
+          float slope = clamp(height / 4000.0, 0.0, 1.0);
+          float shade = mix(0.9, 0.6, slope);
+          color = vec4(vec3(shade), 1.0);
+
+  water-poly:
+    base: polygons
+  water-line:
+    base: lines
+
+cameras:
+  camera:
+    type: perspective
+
+scene:
+  background:
+    color: global.bg
+
+layers:
+  # 1) Relief
+  relief:
+    data: { source: terrain-rgb }
+    draw:
+      hillshade:
+        order: 0
+        raster: true
+
+  # 2) Wasserflächen (Seen/Meere) – flächig
+  water_areas:
+    data: { source: vect, layer: water }
+    draw:
+      water-poly:
+        order: 10
+        color: global.water_fill
+
+  # 3) Flüsse/Küstenlinien – zarte Linien
+  water_lines:
+    data: { source: vect, layer: water }
+    filter: { kind: [river, canal, stream, lake], $zoom: { min: 5 } }
+    draw:
+      water-line:
+        order: 11
+        color: global.water_line
+        width: [[5, 0.25px], [8, 0.6px], [12, 1.2px], [16, 2.0px]]
