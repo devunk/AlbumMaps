@@ -68,110 +68,129 @@
     </div>
   </aside>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/tangram/dist/tangram.min.js"></script>
-  <script>
-    // Leaflet-Karte
-    const map = L.map('map', {
-      zoomControl: true,
-      attributionControl: false,
-      maxBounds: [[55.2, 5.5],[47.0, 15.5]],
-      maxBoundsViscosity: 1.0
-    }).setView([51.16, 10.45], 5.7);
+ <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/tangram/dist/tangram.min.js"></script>
+<script>
+  // --- Leaflet
+  const map = L.map('map', {
+    zoomControl: true,
+    attributionControl: false,
+    maxBounds: [[55.2, 5.5],[47.0, 15.5]],
+    maxBoundsViscosity: 1.0
+  }).setView([51.16, 10.45], 5.7);
 
-    // Tangram-Layer (lädt scene.yaml im selben Ordner)
-    const layer = Tangram.leafletLayer({ scene: 'scene.yaml' }).addTo(map);
+  // --- Tangram-Layer (scene.yaml muss im selben Ordner liegen)
+  const layer = Tangram.leafletLayer({ scene: 'scene.yaml' }).addTo(map);
 
-    // Minimieren/Maximieren
-    const panel = document.getElementById('configPanel');
-    const toggleBtn = document.getElementById('toggleBtn');
-    toggleBtn.addEventListener('click', () => {
-      panel.classList.toggle('minimized');
-      toggleBtn.textContent = panel.classList.contains('minimized') ? '+' : '–';
+  // --- UI helpers
+  const qs = id => document.getElementById(id);
+  const ex = qs('ex'), exVal = qs('exVal');
+
+  // Farbinputs (IDs müssen zu deinen Inputs passen)
+  const colorInputs = {
+    water_fill: qs('waterFill'),
+    water_line: qs('waterLine'),
+    forest_fill: qs('forestFill'),
+    urban_fill:  qs('urbanFill'),
+    elev_0:      qs('elev0'),
+    elev_200:    qs('elev200'),
+    elev_600:    qs('elev600'),
+    elev_1000:   qs('elev1000'),
+    elev_1500:   qs('elev1500'),
+    elev_2500:   qs('elev2500'),
+  };
+
+  // Fallback-Palette (verhindert null/undefined)
+  const defaults = {
+    water_fill: [0.38,0.69,1.00,1.0],
+    water_line: [0.41,0.71,1.00,1.0],
+    forest_fill:[0.06,0.25,0.12,1.0],
+    urban_fill: [0.25,0.27,0.30,0.9],
+    elev_0:     [0.85,0.92,0.83,1.0],
+    elev_200:   [0.80,0.87,0.78,1.0],
+    elev_600:   [0.76,0.74,0.66,1.0],
+    elev_1000:  [0.68,0.63,0.55,1.0],
+    elev_1500:  [0.78,0.78,0.78,1.0],
+    elev_2500:  [0.95,0.95,0.95,1.0],
+  };
+
+  function hexToRgbaArr(hex, fb){
+    if (!hex || !/^#([0-9a-f]{6})$/i.test(hex)) return fb;
+    const m = hex.slice(1);
+    return [
+      parseInt(m.slice(0,2),16)/255,
+      parseInt(m.slice(2,4),16)/255,
+      parseInt(m.slice(4,6),16)/255,
+      1
+    ];
+  }
+
+  async function applyConfig(){
+    // Guard: Scene muss existieren und eine config haben
+    if (!layer.scene || !layer.scene.config) return;
+
+    const g = {
+      exaggeration: parseFloat(ex.value) || 1.8,
+      water_fill: hexToRgbaArr(colorInputs.water_fill?.value, defaults.water_fill),
+      water_line: hexToRgbaArr(colorInputs.water_line?.value, defaults.water_line),
+      forest_fill:hexToRgbaArr(colorInputs.forest_fill?.value, defaults.forest_fill),
+      urban_fill: hexToRgbaArr(colorInputs.urban_fill?.value,  defaults.urban_fill),
+      elev_0:     hexToRgbaArr(colorInputs.elev_0?.value,     defaults.elev_0),
+      elev_200:   hexToRgbaArr(colorInputs.elev_200?.value,   defaults.elev_200),
+      elev_600:   hexToRgbaArr(colorInputs.elev_600?.value,   defaults.elev_600),
+      elev_1000:  hexToRgbaArr(colorInputs.elev_1000?.value,  defaults.elev_1000),
+      elev_1500:  hexToRgbaArr(colorInputs.elev_1500?.value,  defaults.elev_1500),
+      elev_2500:  hexToRgbaArr(colorInputs.elev_2500?.value,  defaults.elev_2500),
+    };
+
+    await layer.scene.updateConfig({ global: g });
+    await layer.scene.rebuild();
+
+    exVal.textContent = g.exaggeration.toFixed(1);
+
+    // Debug: zeigen, was wirklich aktiv ist
+    console.log('globals.water_fill', layer.scene.config.global.water_fill,
+                'globals.water_line', layer.scene.config.global.water_line);
+    console.log('draw water-poly', layer.scene.config.layers.water_areas.draw['water-poly']);
+  }
+
+  // Warten bis die Scene FERTIG ist (sicherer als auf scene.subscribe)
+  layer.on('load', async () => {
+    // Einmal initial anwenden (damit UI-Werte in die Szene gehen)
+    await applyConfig();
+
+    // Events registrieren
+    ex.addEventListener('input', applyConfig);
+    Object.values(colorInputs).forEach(inp => inp.addEventListener('input', applyConfig));
+
+    // Reset-Button (falls vorhanden)
+    const reset = document.getElementById('reset');
+    if (reset) reset.addEventListener('click', () => {
+      ex.value = 1.8; ex.dispatchEvent(new Event('input'));
+      colorInputs.water_fill.value = '#61b0ff';
+      colorInputs.water_line.value = '#69b6ff';
+      colorInputs.forest_fill.value = '#0f401f';
+      colorInputs.urban_fill.value  = '#40454d';
+      colorInputs.elev_0.value      = '#d9ebd4';
+      colorInputs.elev_200.value    = '#cddfc7';
+      colorInputs.elev_600.value    = '#c2bda8';
+      colorInputs.elev_1000.value   = '#aea18c';
+      colorInputs.elev_1500.value   = '#c7c7c7';
+      colorInputs.elev_2500.value   = '#f2f2f2';
+      applyConfig();
     });
+  });
 
-    // UI Helpers
-    const qs = (id) => document.getElementById(id);
-    const hexToRgbaArr = (hex) => {
-      const m = hex.replace('#','');
-      return [parseInt(m.slice(0,2),16)/255, parseInt(m.slice(2,4),16)/255, parseInt(m.slice(4,6),16)/255, 1];
-    };
+  // PNG-Export (im Panel-Button oder Konsole: window.exportPNG())
+  window.exportPNG = async () => {
+    if (!layer.scene) return;
+    const blob = await layer.scene.screenshot({ width: 5000, height: 5000 });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'map_export.png';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+</script>
 
-    const ex = qs('ex'), exVal = qs('exVal');
-    const colorInputs = {
-      water_fill: qs('waterFill'),
-      water_line: qs('waterLine'),
-      forest_fill: qs('forestFill'),
-      urban_fill:  qs('urbanFill'),
-      elev_0:      qs('elev0'),
-      elev_200:    qs('elev200'),
-      elev_600:    qs('elev600'),
-      elev_1000:   qs('elev1000'),
-      elev_1500:   qs('elev1500'),
-      elev_2500:   qs('elev2500'),
-    };
-
-    // Warten, bis Tangram-Scene bereit
-    function whenSceneReady(){
-      return new Promise(resolve=>{
-        if (layer.scene && layer.scene.config) return resolve();
-        layer.scene.subscribe({ load: () => resolve() });
-      });
-    }
-
-    async function applyConfig(){
-      if (!layer.scene || !layer.scene.config) return;
-      const globals = {
-        exaggeration: parseFloat(ex.value),
-        water_fill:   hexToRgbaArr(colorInputs.water_fill.value),
-        water_line:   hexToRgbaArr(colorInputs.water_line.value),
-        forest_fill:  hexToRgbaArr(colorInputs.forest_fill.value),
-        urban_fill:   hexToRgbaArr(colorInputs.urban_fill.value),
-        elev_0:       hexToRgbaArr(colorInputs.elev_0.value),
-        elev_200:     hexToRgbaArr(colorInputs.elev_200.value),
-        elev_600:     hexToRgbaArr(colorInputs.elev_600.value),
-        elev_1000:    hexToRgbaArr(colorInputs.elev_1000.value),
-        elev_1500:    hexToRgbaArr(colorInputs.elev_1500.value),
-        elev_2500:    hexToRgbaArr(colorInputs.elev_2500.value),
-      };
-      await layer.scene.updateConfig({ global: globals });
-      await layer.scene.rebuild();
-      exVal.textContent = globals.exaggeration.toFixed(1);
-    }
-
-    (async () => {
-      await whenSceneReady();
-      // Defaults anwenden
-      await applyConfig();
-      // UI-Events
-      ex.addEventListener('input', applyConfig);
-      Object.values(colorInputs).forEach(inp => inp.addEventListener('input', applyConfig));
-      qs('reset').addEventListener('click', () => {
-        ex.value = 1.8; ex.dispatchEvent(new Event('input'));
-        colorInputs.water_fill.value = '#61b0ff';
-        colorInputs.water_line.value = '#69b6ff';
-        colorInputs.forest_fill.value = '#0f401f';
-        colorInputs.urban_fill.value  = '#40454d';
-        colorInputs.elev_0.value      = '#d9ebd4';
-        colorInputs.elev_200.value    = '#cddfc7';
-        colorInputs.elev_600.value    = '#c2bda8';
-        colorInputs.elev_1000.value   = '#aea18c';
-        colorInputs.elev_1500.value   = '#c7c7c7';
-        colorInputs.elev_2500.value   = '#f2f2f2';
-        applyConfig();
-      });
-    })();
-
-    // PNG-Export (Konsole: window.exportPNG())
-    window.exportPNG = async () => {
-      await whenSceneReady();
-      const blob = await layer.scene.screenshot({ width: 5000, height: 5000 });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'map_export.png';
-      a.click();
-      URL.revokeObjectURL(a.href);
-    };
-  </script>
-</body>
 </html>
