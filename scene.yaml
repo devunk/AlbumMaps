@@ -1,13 +1,14 @@
+# Physische Karte mit farbigen Höhenklassen, Überhöhung, Wald/Stadt und sichtbarem Wasser
 global:
   bg: [1.0, 1.0, 1.0, 1.0]
 
-  # Live änderbare Farben
+  # Farben (kannst du im UI überschreiben, falls du den Konfigurator nutzt)
   water_fill: [0.38, 0.69, 1.0, 1.0]
   water_line: [0.41, 0.71, 1.0, 1.0]
   forest_fill: [0.06, 0.25, 0.12, 1.0]
   urban_fill:  [0.25, 0.27, 0.30, 0.9]
 
-  # Höhenklassen-Farben (werden als Shader-Uniforms genutzt)
+  # Farben der Höhenklassen
   elev_0:    [0.85, 0.92, 0.83, 1.0]   # <200 m
   elev_200:  [0.80, 0.87, 0.78, 1.0]   # 200–600 m
   elev_600:  [0.76, 0.74, 0.66, 1.0]   # 600–1000 m
@@ -15,7 +16,7 @@ global:
   elev_1500: [0.78, 0.78, 0.78, 1.0]   # 1500–2500 m
   elev_2500: [0.95, 0.95, 0.95, 1.0]   # >2500 m
 
-  # Überhöhung (per UI änderbar)
+  # Überhöhungs-Faktor (1.0 = normal, größer = stärker)
   exaggeration: 1.8
 
 sources:
@@ -38,6 +39,7 @@ sources:
     max_zoom: 14
 
 styles:
+  # leicht aufgehelltes Basis-Hillshade
   base_hillshade:
     base: raster
     shaders:
@@ -47,12 +49,13 @@ styles:
           g = mix(0.94, 0.65, g);
           color = vec4(vec3(g), 1.0);
 
+  # farbige Höhenklassen mit Überhöhung
   terrain_colors:
     base: raster
     blend: overlay
     shaders:
       uniforms:
-        ex: global.exaggeration
+        ex:       global.exaggeration
         elev0:    global.elev_0
         elev200:  global.elev_200
         elev600:  global.elev_600
@@ -61,7 +64,7 @@ styles:
         elev2500: global.elev_2500
       blocks:
         color: |
-          // Terrain-RGB -> Höhe (m)
+          // Terrain-RGB -> Höhe in Metern
           float r = color.r * 255.0;
           float g = color.g * 255.0;
           float b = color.b * 255.0;
@@ -87,6 +90,7 @@ scene:
     color: global.bg
 
 layers:
+  # 0 – Basis
   hill:
     data: { source: hillshade }
     draw:
@@ -94,6 +98,7 @@ layers:
         order: 0
         raster: true
 
+  # 1 – farbige Höhenklassen
   elevation_colors:
     data: { source: terrain-rgb }
     draw:
@@ -101,6 +106,7 @@ layers:
         order: 1
         raster: true
 
+  # 7 – Wälder
   forests:
     data: { source: vect, layer: landcover }
     filter: { class: [wood, forest], $zoom: { min: 5 } }
@@ -109,6 +115,7 @@ layers:
         order: 7
         color: global.forest_fill
 
+  # 8 – Siedlungsflächen
   urban_landuse:
     data: { source: vect, layer: landuse }
     filter: { class: [residential, commercial, industrial], $zoom: { min: 6 } }
@@ -125,6 +132,7 @@ layers:
         order: 8
         color: global.urban_fill
 
+  # 10/11 – Wasser ganz oben
   water_areas:
     data: { source: vect, layer: water }
     draw:
