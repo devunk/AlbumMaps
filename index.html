@@ -3,48 +3,146 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Deutschland – Relief (Schweiz-Stil)</title>
+  <title>AlbumMaps – Konfigurator</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <style>
     html,body,#map{height:100%;margin:0}
-    .btn{position:fixed;right:12px;top:12px;padding:10px 14px;border:0;border-radius:8px;background:#111;color:#fff;cursor:pointer}
+    .panel{
+      position:fixed; top:12px; right:12px; z-index:1000;
+      background:#111; color:#fff; padding:12px; border-radius:10px; width:300px;
+      font:12px/1.3 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial;
+      box-shadow:0 8px 24px rgba(0,0,0,.25);
+    }
+    .panel h3{margin:0 0 8px 0; font-size:14px}
+    .row{display:flex; align-items:center; gap:8px; margin:6px 0}
+    .row label{min-width:110px}
+    .row input[type="range"]{flex:1}
+    .row input[type="color"]{width:28px; height:28px; border:none; padding:0}
+    .hint{opacity:.7; font-size:11px; margin-top:6px}
+    .btn{margin-top:8px; width:100%; padding:8px; border:0; border-radius:8px; background:#2b7fff; color:#fff; cursor:pointer}
   </style>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
 <body>
   <div id="map"></div>
-  <button class="btn" onclick="exportPNG()">Export PNG</button>
+
+  <!-- UI: Konfigurator -->
+  <div class="panel">
+    <h3>Karten-Konfigurator</h3>
+
+    <div class="row">
+      <label for="ex">Überhöhung</label>
+      <input id="ex" type="range" min="0.8" max="3.0" step="0.1" value="1.8">
+      <span id="exVal">1.8</span>
+    </div>
+
+    <div class="row"><label>Wasser Fläche</label><input id="waterFill" type="color" value="#61b0ff"></div>
+    <div class="row"><label>Wasser Linie</label><input id="waterLine" type="color" value="#69b6ff"></div>
+    <div class="row"><label>Wald</label><input id="forestFill" type="color" value="#0f401f"></div>
+    <div class="row"><label>Stadt</label><input id="urbanFill" type="color" value="#40454d"></div>
+
+    <div class="row"><label>Höhe &lt;200 m</label><input id="elev0" type="color" value="#d9ebd4"></div>
+    <div class="row"><label>200–600 m</label><input id="elev200" type="color" value="#cddfC7"></div>
+    <div class="row"><label>600–1000 m</label><input id="elev600" type="color" value="#c2bdA8"></div>
+    <div class="row"><label>1000–1500 m</label><input id="elev1000" type="color" value="#aea18c"></div>
+    <div class="row"><label>1500–2500 m</label><input id="elev1500" type="color" value="#c7c7c7"></div>
+    <div class="row"><label>&gt;2500 m</label><input id="elev2500" type="color" value="#f2f2f2"></div>
+
+    <button class="btn" id="reset">Reset</button>
+    <div class="hint">Tipp: Änderungen wirken sofort. PNG-Export: <kbd>window.exportPNG()</kbd> in der Konsole.</div>
+  </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/tangram/dist/tangram.min.js"></script>
   <script>
-    // 1) Leaflet-Karte
+    // Karte
     const map = L.map('map', {
       zoomControl: true,
       attributionControl: false,
-      // Deutschland grob als "Käfig", damit keine Nachbarländer in die Ansicht rutschen
       maxBounds: [[55.2, 5.5],[47.0, 15.5]],
       maxBoundsViscosity: 1.0
+    }).setView([51.16, 10.45], 5.7);
+
+    // Tangram-Layer
+    const layer = Tangram.leafletLayer({ scene: 'scene.yaml' }).addTo(map);
+
+    // Helper: Hex -> [r,g,b,1]
+    const hexToRgbaArr = (hex) => {
+      const m = hex.replace('#','');
+      const r = parseInt(m.substring(0,2),16)/255;
+      const g = parseInt(m.substring(2,4),16)/255;
+      const b = parseInt(m.substring(4,6),16)/255;
+      return [r,g,b,1];
+    };
+
+    // UI-Elemente
+    const qs = (id) => document.getElementById(id);
+    const ex = qs('ex'), exVal = qs('exVal');
+
+    const colorInputs = {
+      water_fill: qs('waterFill'),
+      water_line: qs('waterLine'),
+      forest_fill: qs('forestFill'),
+      urban_fill:  qs('urbanFill'),
+      elev_0:      qs('elev0'),
+      elev_200:    qs('elev200'),
+      elev_600:    qs('elev600'),
+      elev_1000:   qs('elev1000'),
+      elev_1500:   qs('elev1500'),
+      elev_2500:   qs('elev2500'),
+    };
+
+    // Aktuellen Stand in Szene schreiben
+    async function applyConfig(){
+      const globals = {
+        exaggeration: parseFloat(ex.value),
+        water_fill: hexToRgbaArr(colorInputs.water_fill.value),
+        water_line: hexToRgbaArr(colorInputs.water_line.value),
+        forest_fill: hexToRgbaArr(colorInputs.forest_fill.value),
+        urban_fill:  hexToRgbaArr(colorInputs.urban_fill.value),
+        elev_0:      hexToRgbaArr(colorInputs.elev_0.value),
+        elev_200:    hexToRgbaArr(colorInputs.elev_200.value),
+        elev_600:    hexToRgbaArr(colorInputs.elev_600.value),
+        elev_1000:   hexToRgbaArr(colorInputs.elev_1000.value),
+        elev_1500:   hexToRgbaArr(colorInputs.elev_1500.value),
+        elev_2500:   hexToRgbaArr(colorInputs.elev_2500.value),
+      };
+      // Update Tangram scene globals & rebuild
+      await layer.scene.updateConfig({ global: globals });
+      await layer.scene.rebuild();
+      exVal.textContent = globals.exaggeration.toFixed(1);
+    }
+
+    // Events
+    ex.addEventListener('input', applyConfig);
+    Object.values(colorInputs).forEach(inp => inp.addEventListener('input', applyConfig));
+    qs('reset').addEventListener('click', () => {
+      // Werte zurücksetzen (entsprechen den Defaults in scene.yaml)
+      ex.value = 1.8; ex.dispatchEvent(new Event('input'));
+      colorInputs.water_fill.value = '#61b0ff';
+      colorInputs.water_line.value = '#69b6ff';
+      colorInputs.forest_fill.value = '#0f401f';
+      colorInputs.urban_fill.value  = '#40454d';
+      colorInputs.elev_0.value      = '#d9ebd4';
+      colorInputs.elev_200.value    = '#cddfc7';
+      colorInputs.elev_600.value    = '#c2bda8';
+      colorInputs.elev_1000.value   = '#aea18c';
+      colorInputs.elev_1500.value   = '#c7c7c7';
+      colorInputs.elev_2500.value   = '#f2f2f2';
+      applyConfig();
     });
 
-    // Startansicht Deutschland
-    map.setView([51.16, 10.45], 5.7);
-
-    // 2) Tangram-Layer mit Szene
-    const layer = Tangram.leafletLayer({
-      scene: 'scene.yaml',
-      events: { load: () => console.log('Tangram scene loaded') }
-    }).addTo(map);
-
-    // 3) PNG-Export (groß – bei Bedarf Werte ändern)
-    async function exportPNG(){
+    // Export-Funktion (Konsole: window.exportPNG())
+    window.exportPNG = async () => {
       const blob = await layer.scene.screenshot({ width: 5000, height: 5000 });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'de_relief_schweiz_stil.png';
+      a.download = 'map_export.png';
       a.click();
       URL.revokeObjectURL(a.href);
-    }
-    window.exportPNG = exportPNG;
+    };
+
+    // Nach Ladeschluss Defaultwerte einmalig in Szene pushen
+    layer.on('load', applyConfig);
   </script>
 </body>
 </html>
