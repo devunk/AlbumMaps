@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Deutschland – Relief (Schweiz-Stil)</title>
+  <style>
+    html,body,#map{height:100%;margin:0}
+    .btn{position:fixed;right:12px;top:12px;padding:10px 14px;border:0;border-radius:8px;background:#111;color:#fff;cursor:pointer}
+  </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+</head>
+<body>
+  <div id="map"></div>
+  <button class="btn" onclick="exportPNG()">Export PNG</button>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/tangram/dist/tangram.min.js"></script>
+  <script>
+    // 1) Leaflet-Karte
+    const map = L.map('map', {
+      zoomControl: true,
+      attributionControl: false,
+      // Deutschland grob als "Käfig", damit keine Nachbarländer in die Ansicht rutschen
+      maxBounds: [[55.2, 5.5],[47.0, 15.5]],
+      maxBoundsViscosity: 1.0
+    });
+
+    // Startansicht Deutschland
+    map.setView([51.16, 10.45], 5.7);
+
+    // 2) Tangram-Layer mit Szene
+    const layer = Tangram.leafletLayer({
+      scene: 'scene.yaml',
+      events: { load: () => console.log('Tangram scene loaded') }
+    }).addTo(map);
+
+    // 3) PNG-Export (groß – bei Bedarf Werte ändern)
+    async function exportPNG(){
+      const blob = await layer.scene.screenshot({ width: 5000, height: 5000 });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'de_relief_schweiz_stil.png';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+    window.exportPNG = exportPNG;
+  </script>
+</body>
+</html>
