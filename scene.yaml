@@ -1,37 +1,28 @@
-# Physische Karte (weltweit)
-# - Basis-Hillshade (sichtbar, auch wenn Color-Shader ausfällt)
-# - Farbige Höhenklassen mit Überhöhung (global.exaggeration)
-# - Wälder (dunkelgrün), Siedlungen (dunkelgrau), Wasser (blau)
-# - keine Labels/Grenzen
-
+# Physische Karte mit Höhenklassen, Überhöhung, Wald- und Stadtflächen
 global:
   bg: [1.0, 1.0, 1.0, 1.0]
 
-  # Farben
-  water_fill: [0.38, 0.69, 1.0, 1.0]   # #61B0FF
-  water_line: [0.41, 0.71, 1.0, 1.0]   # #69B6FF
-  forest_fill: [0.06, 0.25, 0.12, 1.0] # sehr dunkles Grün
-  urban_fill:  [0.25, 0.27, 0.30, 0.9] # dunkles Grau
+  water_fill: [0.38, 0.69, 1.0, 1.0]   # Seen/Meer blau
+  water_line: [0.41, 0.71, 1.0, 1.0]   # Flüsse blau
+  forest_fill: [0.06, 0.25, 0.12, 1.0] # Wälder dunkelgrün
+  urban_fill: [0.25, 0.27, 0.30, 0.9]  # Siedlungen dunkelgrau
 
-  # Überhöhung (1.0 = natürlich, >1 = stärker)
+  # Überhöhungs-Faktor (1.0 = normal, größer = bergiger)
   exaggeration: 1.8
 
 sources:
-  # Sicher sichtbares Relief
   hillshade:
     type: Raster
     url: https://api.maptiler.com/tiles/hillshade/{z}/{x}/{y}.png?key=582YgxGFbrCVlE8xVsbq
     tile_size: 512
     max_zoom: 15
 
-  # Höhenwerte für farbige Klassen
   terrain-rgb:
     type: Raster
     url: https://api.maptiler.com/tiles/terrain-rgb/{z}/{x}/{y}.png?key=582YgxGFbrCVlE8xVsbq
     tile_size: 512
     max_zoom: 14
 
-  # Vektor-Features (Wasser, Wälder, Siedlung)
   vect:
     type: MVT
     url: https://api.maptiler.com/tiles/v3/{z}/{x}/{y}.mvt?key=582YgxGFbrCVlE8xVsbq
@@ -39,41 +30,37 @@ sources:
     max_zoom: 14
 
 styles:
-  # 1) Basis-Hillshade leicht aufgehellt
   base_hillshade:
     base: raster
     shaders:
       blocks:
         color: |
-          // leicht heller, damit Platz für Farben oben bleibt
           float g = color.r;
           g = mix(0.94, 0.65, g);
           color = vec4(vec3(g), 1.0);
 
-  # 2) Farbige Höhenklassen aus terrain-rgb (mit Überhöhung)
   terrain_colors:
     base: raster
-    blend: overlay            # mischt sich schön über das Hillshade
+    blend: overlay
     shaders:
       uniforms:
         ex: global.exaggeration
       blocks:
         color: |
-          // Terrain-RGB -> Höhe (m)
+          // Terrain-RGB -> Höhe in Meter
           float r = color.r * 255.0;
           float g = color.g * 255.0;
           float b = color.b * 255.0;
           float h = -10000.0 + ((r * 256.0 * 256.0 + g * 256.0 + b) * 0.1);
-          h = h * ex; // Überhöhung
+          h = h * ex;
 
-          // Farbklassen (einfach anpassen)
           vec4 c;
-          if (h < 200.0)       c = vec4(0.85, 0.92, 0.83, 1.0);   // hellgrün
-          else if (h < 600.0)  c = vec4(0.80, 0.87, 0.78, 1.0);   // grün/beige
-          else if (h < 1000.0) c = vec4(0.76, 0.74, 0.66, 1.0);   // beige-grau
-          else if (h < 1500.0) c = vec4(0.68, 0.63, 0.55, 1.0);   // braun-grau
-          else if (h < 2500.0) c = vec4(0.78, 0.78, 0.78, 1.0);   // hellgrau
-          else                 c = vec4(0.95, 0.95, 0.95, 1.0);   // fast weiß
+          if (h < 200.0)       c = vec4(0.85, 0.92, 0.83, 1.0); // unter 200 m
+          else if (h < 600.0)  c = vec4(0.80, 0.87, 0.78, 1.0); // 200–600 m
+          else if (h < 1000.0) c = vec4(0.76, 0.74, 0.66, 1.0); // 600–1000 m
+          else if (h < 1500.0) c = vec4(0.68, 0.63, 0.55, 1.0); // 1000–1500 m
+          else if (h < 2500.0) c = vec4(0.78, 0.78, 0.78, 1.0); // 1500–2500 m
+          else                 c = vec4(0.95, 0.95, 0.95, 1.0); // über 2500 m
           color = c;
 
   water-poly: { base: polygons }
@@ -86,7 +73,6 @@ scene:
     color: global.bg
 
 layers:
-  # --- Relief-Unterlage ---
   hill:
     data: { source: hillshade }
     draw:
@@ -94,7 +80,6 @@ layers:
         order: 0
         raster: true
 
-  # --- Farbige Höhenklassen ---
   elevation_colors:
     data: { source: terrain-rgb }
     draw:
@@ -102,7 +87,6 @@ layers:
         order: 1
         raster: true
 
-  # --- Wälder (landcover.class = wood/forest) ---
   forests:
     data: { source: vect, layer: landcover }
     filter: { class: [wood, forest], $zoom: { min: 5 } }
@@ -111,7 +95,6 @@ layers:
         order: 7
         color: global.forest_fill
 
-  # --- Siedlungsflächen ---
   urban_landuse:
     data: { source: vect, layer: landuse }
     filter: { class: [residential, commercial, industrial], $zoom: { min: 6 } }
@@ -128,7 +111,6 @@ layers:
         order: 8
         color: global.urban_fill
 
-  # --- Wasser ---
   water_areas:
     data: { source: vect, layer: water }
     draw:
