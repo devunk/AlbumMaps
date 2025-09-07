@@ -137,7 +137,7 @@ layers:
     data: { source: vect, layer: water }
     draw:
       water-poly:
-        order: 10
+        order: 50
         color: global.water_fill
 
   waterways:
@@ -145,6 +145,6 @@ layers:
     filter: { $zoom: { min: 5 } }
     draw:
       water-line:
-        order: 11
+        order: 60
         color: global.water_line
         width: [[5, 0.4px], [8, 0.7px], [12, 1.3px], [16, 2.0px]]
