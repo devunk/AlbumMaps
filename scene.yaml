@@ -1,13 +1,21 @@
-# Physische Karte mit Höhenklassen, Überhöhung, Wald- und Stadtflächen
 global:
   bg: [1.0, 1.0, 1.0, 1.0]
 
-  water_fill: [0.38, 0.69, 1.0, 1.0]   # Seen/Meer blau
-  water_line: [0.41, 0.71, 1.0, 1.0]   # Flüsse blau
-  forest_fill: [0.06, 0.25, 0.12, 1.0] # Wälder dunkelgrün
-  urban_fill: [0.25, 0.27, 0.30, 0.9]  # Siedlungen dunkelgrau
+  # Live änderbare Farben
+  water_fill: [0.38, 0.69, 1.0, 1.0]
+  water_line: [0.41, 0.71, 1.0, 1.0]
+  forest_fill: [0.06, 0.25, 0.12, 1.0]
+  urban_fill:  [0.25, 0.27, 0.30, 0.9]
 
-  # Überhöhungs-Faktor (1.0 = normal, größer = bergiger)
+  # Höhenklassen-Farben (werden als Shader-Uniforms genutzt)
+  elev_0:    [0.85, 0.92, 0.83, 1.0]   # <200 m
+  elev_200:  [0.80, 0.87, 0.78, 1.0]   # 200–600 m
+  elev_600:  [0.76, 0.74, 0.66, 1.0]   # 600–1000 m
+  elev_1000: [0.68, 0.63, 0.55, 1.0]   # 1000–1500 m
+  elev_1500: [0.78, 0.78, 0.78, 1.0]   # 1500–2500 m
+  elev_2500: [0.95, 0.95, 0.95, 1.0]   # >2500 m
+
+  # Überhöhung (per UI änderbar)
   exaggeration: 1.8
 
 sources:
@@ -45,26 +53,32 @@ styles:
     shaders:
       uniforms:
         ex: global.exaggeration
+        elev0:    global.elev_0
+        elev200:  global.elev_200
+        elev600:  global.elev_600
+        elev1000: global.elev_1000
+        elev1500: global.elev_1500
+        elev2500: global.elev_2500
       blocks:
         color: |
-          // Terrain-RGB -> Höhe in Meter
+          // Terrain-RGB -> Höhe (m)
           float r = color.r * 255.0;
           float g = color.g * 255.0;
           float b = color.b * 255.0;
           float h = -10000.0 + ((r * 256.0 * 256.0 + g * 256.0 + b) * 0.1);
-          h = h * ex;
+          h = h * ex; // Überhöhung
 
           vec4 c;
-          if (h < 200.0)       c = vec4(0.85, 0.92, 0.83, 1.0); // unter 200 m
-          else if (h < 600.0)  c = vec4(0.80, 0.87, 0.78, 1.0); // 200–600 m
-          else if (h < 1000.0) c = vec4(0.76, 0.74, 0.66, 1.0); // 600–1000 m
-          else if (h < 1500.0) c = vec4(0.68, 0.63, 0.55, 1.0); // 1000–1500 m
-          else if (h < 2500.0) c = vec4(0.78, 0.78, 0.78, 1.0); // 1500–2500 m
-          else                 c = vec4(0.95, 0.95, 0.95, 1.0); // über 2500 m
+          if (h < 200.0)       c = elev0;
+          else if (h < 600.0)  c = elev200;
+          else if (h < 1000.0) c = elev600;
+          else if (h < 1500.0) c = elev1000;
+          else if (h < 2500.0) c = elev1500;
+          else                 c = elev2500;
           color = c;
 
-  water-poly: { base: polygons }
-  water-line: { base: lines }
+  water-poly:  { base: polygons }
+  water-line:  { base: lines }
   forest-poly: { base: polygons }
   urban-poly:  { base: polygons }
 
